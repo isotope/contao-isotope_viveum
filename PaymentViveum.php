@@ -193,7 +193,7 @@ class PaymentViveum extends IsotopePayment
 
         $objTemplate = new FrontendTemplate('iso_payment_viveum');
 
-        $objTemplate->action = 'https://viveum.v-psp.com//ncol/' . ($this->debug ? 'test' : 'prod') . '/orderstandard_utf8.asp';
+        $objTemplate->action = 'https://viveum.v-psp.com/ncol/' . ($this->debug ? 'test' : 'prod') . '/orderstandard_utf8.asp';
         $objTemplate->params = $arrParam;
         $objTemplate->slabel = $GLOBALS['TL_LANG']['MSC']['pay_with_cc'][2];
         $objTemplate->id = $this->id;
