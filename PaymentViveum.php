@@ -106,38 +106,66 @@ class PaymentViveum extends IsotopePayment
      */
     public function processPostSale()
     {
-        if ($this->Input->post('NCERROR') > 0) {
-            $this->log('Order ID "' . $this->Input->post('orderID') . '" has NCERROR ' . $this->Input->post('NCERROR'), __METHOD__, TL_ERROR);
-            return;
-        }
-
         $objOrder = new IsotopeOrder();
 
         if (!$objOrder->findBy('id', $this->Input->post('orderID'))) {
             $this->log('Order ID "' . $this->Input->post('orderID') . '" not found', __METHOD__, TL_ERROR);
-            return;
+            return false;
         }
 
         if (!$this->validateSHASign()) {
             $this->log('Received invalid postsale data for order ID "' . $objOrder->id . '"', __METHOD__, TL_ERROR);
-            return;
+            return false;
         }
 
         // Validate payment data
         if ($objOrder->currency != $this->Input->post('currency') || $objOrder->grandTotal != $this->Input->post('amount')) {
             $this->log('Postsale checkout manipulation in payment for Order ID ' . $objOrder->id . '!', __METHOD__, TL_ERROR);
-            return;
+            return false;
         }
 
         if (!$objOrder->checkout()) {
             $this->log('Post-Sale checkout for Order ID "' . $objOrder->id . '" failed', __METHOD__, TL_ERROR);
-            return;
+            return false;
         }
 
-        $objOrder->date_paid = time();
-        $objOrder->updateOrderStatus($this->new_order_status);
+        // Validate payment status
+        switch ($this->Input->post('STATUS')) {
+
+            case 9:  // Zahlung beantragt (Authorize & Capture)
+                $objOrder->date_paid = time();
+                // no break
+
+            case 5:  // Genehmigt (Authorize ohne Capture)
+                $objOrder->updateOrderStatus($this->new_order_status);
+                break;
+
+            case 41: // Unbekannter Wartezustand
+            case 51: // Genehmigung im Wartezustand
+            case 91: // Zahlung im Wartezustand
+            case 52: // Genehmigung nicht bekannt
+            case 92: // Zahlung unsicher
+                $objConfig = new IsotopeConfig();
+                if (!$objConfig->findBy('id', $objOrder->config_id)) {
+                    $this->log('Config for Order ID ' . $objOrder->id . ' not found', __METHOD__, TL_ERROR);
+                    return false;
+                }
+
+                $objOrder->updateOrderStatus($objConfig->orderstatus_error);
+                break;
+
+            case 0:  // Ungültig / Unvollständig
+            case 1:  // Zahlungsvorgang abgebrochen
+            case 2:  // Genehmigung verweigert
+            case 4:  // Gespeichert
+            case 93: // Bezahlung verweigert
+            default:
+                return false;
+        }
 
         $objOrder->save();
+
+        return true;
     }
 
 
@@ -174,6 +202,7 @@ class PaymentViveum extends IsotopePayment
             'ACCEPTURL' => $this->Environment->base . IsotopeFrontend::addQueryStringToUrl('uid=' . $objOrder->uniqid, $this->addToUrl('step=complete', true)),
             'DECLINEURL' => $strFailedUrl,
             'EXCEPTIONURL' => $strFailedUrl,
+            'BACKURL' => $this->Environment->base . $this->addToUrl('step=review', true),
             'TP' => $this->viveum_dynamic_template ? $this->viveum_dynamic_template : '',
             'PARAMPLUS' => 'mod=pay&amp;id=' . $this->id,
         );
