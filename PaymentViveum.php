@@ -124,11 +124,6 @@ class PaymentViveum extends IsotopePayment
             return false;
         }
 
-        if (!$objOrder->checkout()) {
-            $this->log('Post-Sale checkout for Order ID "' . $objOrder->id . '" failed', __METHOD__, TL_ERROR);
-            return false;
-        }
-
         // Validate payment status
         switch ($this->Input->post('STATUS')) {
 
@@ -137,7 +132,7 @@ class PaymentViveum extends IsotopePayment
                 // no break
 
             case 5:  // Genehmigt (Authorize ohne Capture)
-                $objOrder->updateOrderStatus($this->new_order_status);
+                $intStatus = $this->new_order_status;
                 break;
 
             case 41: // Unbekannter Wartezustand
@@ -151,7 +146,7 @@ class PaymentViveum extends IsotopePayment
                     return false;
                 }
 
-                $objOrder->updateOrderStatus($objConfig->orderstatus_error);
+                $intStatus = $objConfig->orderstatus_error;
                 break;
 
             case 0:  // Ungültig / Unvollständig
@@ -163,6 +158,12 @@ class PaymentViveum extends IsotopePayment
                 return false;
         }
 
+        if (!$objOrder->checkout()) {
+            $this->log('Post-Sale checkout for Order ID "' . $objOrder->id . '" failed', __METHOD__, TL_ERROR);
+            return false;
+        }
+
+        $objOrder->updateOrderStatus($intStatus);
         $objOrder->save();
 
         return true;
